@@ -1,5 +1,6 @@
 import numpy as np
 from helpers import sum_product
+from maps import *
 
 NODE_KINDS = ['MAP', 'CONSTANT', 'VARIABLE', 'PARAMETER']
 
@@ -18,6 +19,8 @@ class Flow:
     constants = set([])
 
     loss_sources = []
+    loss_map = None
+
     def loss_map(*args): return 0
 
     def __init__(self, inputs=[], outputs=[]):
@@ -43,16 +46,16 @@ class Flow:
             self.constants.add(name)
 
     def connect_map(self, name, map, sources, sink):
-        self.connect('MAP', name=name, value=map, sources=sources, sinks=[sink])
+        self.connect('MAP', name=name, value=map, sources=sources.copy(), sinks=[sink])
 
-    def connect_constant(self, name, value, sinks=None):
-        self.connect('CONSTANT', name=name, value=value, sinks=sinks)
+    def connect_constant(self, name, value, sinks=[]):
+        self.connect('CONSTANT', name=name, value=value, sinks=sinks.copy())
 
-    def connect_variable(self, name, source=None, sinks=None):
-        self.connect('VARIABLE', name=name, sources=[source], sinks=sinks)
+    def connect_variable(self, name, source=[], sinks=[]):
+        self.connect('VARIABLE', name=name, sources=[source], sinks=sinks.copy())
 
-    def connect_parameter(self, name, value=None, sinks=None):
-        self.connect('PARAMETER', name=name, value=value, sinks=sinks)
+    def connect_parameter(self, name, value=None, sinks=[]):
+        self.connect('PARAMETER', name=name, value=value, sinks=sinks.copy())
 
     def set_inputs(self, inputs):
         self.inputs = set(inputs)
@@ -60,10 +63,13 @@ class Flow:
     def set_outputs(self, outputs):
         self.outputs = set(outputs)
 
-    def set_loss(self, sources, scalar_map):
+    def set_loss(self, sources, smooth_scalar_map, supervisors=0):
         self.loss_sources = sources
-        self.loss_map = scalar_map
+        self.loss_map = smooth_scalar_map
+        self.supervisors = supervisors # number of outputs provided during training
 
+    def set_learning_rate(rate):
+        self.learning_rate = rate
 
     def play(self, input_values={}, outputs=None):
         outputs = outputs or self.outputs
@@ -78,8 +84,8 @@ class Flow:
             active_sources = self.sources[active_map]
             active_sink = self.sinks[active_map][0]
             source_activations = [self.nodes[source] for source in active_sources]
-            sink_activation = self.nodes[active_map](*source_activations)
-            print(source_activations)
+            sink_activation = self.nodes[active_map](source_activations)
+
             self.nodes[active_sink] = sink_activation
             traversed.add(active_map)
             traversed.add(active_sink)
@@ -92,10 +98,8 @@ class Flow:
         self.__reset_gradients()
         parameters = parameters or self.parameters
         remaining_parameters = set(parameters)
-        for i, source in enumerate(self.loss_sources):
-            #missing shit
-            self.gradients[source] = self.loss_map.gradient(self.loss_sources)[i]
-        traversed = set(self.loss_sources).copy()
+        self.gradients['LOSS'] = np.array(1.0)
+        traversed = set(['LOSS'])
 
         while remaining_parameters:
             target = self.__choose(remaining_parameters)
@@ -106,13 +110,30 @@ class Flow:
             source_activations = [self.nodes[source] for source in active_sources]
             source_gradients = self.nodes[active_map].gradient(source_activations)
 
+            traversed.add(active_map)
             for i, source in enumerate(active_sources):
                 self.gradients[source] += sum_product(source_gradients[i], sink_gradient)
                 if self.__all_sinks_traversed(source, traversed):
                     traversed.add(source)
-            traversed.add(active_map)
+                    remaining_parameters.discard(source)
+
 
         return {param: self.gradients[param] for param in parameters}
+
+    def train(self, inputs, outputs, learning_rate=.1):
+        self.__attach_supervisors()
+        self.__attach_loss()
+
+        for i in range(len(inputs[self.__choose(self.inputs)])):
+            training_values = self.__build_training_values(inputs, outputs, i)
+            self.play(input_values=training_values)
+            self.backpropagate()
+
+            for parameter in self.parameters:
+                self.nodes[parameter] -= self.gradients[parameter]*learning_rate
+
+        self.__detach_supervisors()
+        self.__detach_loss()
 
     # private helpers
     def __first_node_before(self, node, traversed):
@@ -134,45 +155,54 @@ class Flow:
         return True
 
     def __reset_gradients(self):
-        self.gradients = {x: 0 for x in self.gradients}
+        self.gradients = {x: np.zeros_like(self.nodes[x]) for x in self.nodes}
+
+    def __attach_supervisors(self):
+        self.supervisor_names = []
+        for i in range(self.supervisors):
+            self.supervisor_names.append('SUPERVISOR#{}'.format(i+1))
+            self.connect_variable(name=self.supervisor_names[i], sinks=['LOSS_MAP'])
+
+    def __attach_loss(self):
+        self.connect_variable(name='LOSS', source='LOSS_MAP')
+        self.outputs.add('LOSS')
+        self.connect_map(name='LOSS_MAP', map=self.loss_map,
+                         sources=(self.loss_sources + self.supervisor_names),
+                         sink='LOSS')
+        for source in self.loss_sources:
+            self.sinks[source].append('LOSS_MAP')
+
+
+    def __detach_supervisors(self):
+        for supervisor in self.supervisor_names:
+            self.nodes.pop(supervisor)
+            self.sinks.pop(supervisor)
+            self.sources.pop(supervisor)
+
+    def __detach_loss(self):
+        for source in self.loss_sources:
+            self.sinks[source].pop()
+
+        self.nodes.pop('LOSS')
+        self.sinks.pop('LOSS')
+        self.sources.pop('LOSS')
+        self.outputs.remove('LOSS')
+
+        self.nodes.pop('LOSS_MAP')
+        self.sinks.pop('LOSS_MAP')
+        self.sources.pop('LOSS_MAP')
+
+    def __build_training_values(self, inputs, outputs, i):
+        if not isinstance(outputs[i], list):
+            outputs[i] = [outputs[i]]
+        supervisor_values = {'SUPERVISOR#{}'.format(k+1): out \
+            for k, out in enumerate(outputs[i])}
+        input_values = {name: inputs[name][i] for name in self.inputs}
+        input_values.update(supervisor_values)
+        return input_values
 
     @staticmethod
     def __choose(collection):
         target = collection.pop()
         collection.add(target)
         return target
-
-class Map:
-
-    def __init__(self, map, gradient = None):
-        self.map = map
-        self.gradient = gradient
-
-    def __call__(self, *args):
-        return self.map(*args)
-
-
-class Gradient:
-
-    def __init__(self, calc=lambda x,y: 0):
-        self.calc = calc
-
-    def __call__(activation, error):
-        self.calc(activation, error)
-
-    def calc(activation, error):
-        raise NotImplementedError
-
-# class Cell:
-#
-#     def gradient(self, error_tensor):
-#
-#     def __call__(self, tensor):
-#
-# class FeedforwardCell(Cell):
-#
-#     def gradient(self, error_tensor):
-#
-#     def __call__(self, tensor):
-#
-# class RecurrentCell(Cell):
