@@ -30,6 +30,7 @@ def l2_map(x, y): return np.sum(np.multiply((x - y), (x - y)))
 def l2_grad(x, y): return np.array([2*(x - y), 2*(y - x)])
 l2_norm = SmoothMap(Map(l2_map), Gradient(l2_grad))
 
+# TODO Generalize to higher dimensions and any number of arguments
 def matrix_product_map(x,y): return np.matmul(x, y)
 def matrix_product_grad(x,y):
     dx = np.zeros(shape=(x.shape[0], x.shape[1], x.shape[0], y.shape[1]))
@@ -53,6 +54,19 @@ def add_grad(x, y):
     for i in range(y.shape[0]):
         for j in range(y.shape[1]):
             dy[i, j, i, j] = 1
+    return [dx, dy]
+add = SmoothMap(Map(add_map), Gradient(add_grad))
+
+def multiply_map(x, y): return np.multiply(x, y)
+def multiply_grad(x, y):
+    dx = np.zeros(shape=(x.shape[0], x.shape[1]))
+    for i in range(x.shape[0]):
+        for j in range(x.shape[1]):
+            dx[i, j, i, j] = y[i, j]
+    dy = np.zeros(shape=(y.shape[0], y.shape[1]))
+    for i in range(y.shape[0]):
+        for j in range(y.shape[1]):
+            dy[i, j, i, j] = x[i, j]
     return [dx, dy]
 add = SmoothMap(Map(add_map), Gradient(add_grad))
 
