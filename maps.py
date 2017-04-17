@@ -3,9 +3,10 @@ import numpy as np
 # Some simple classes, mostly for documentation
 class SmoothMap:
     def __init__(self, calc, gradient):
-        self.calc = calc
-        self.gradient = gradient
-
+        self.calc = calc # f: R^n -> R^m (or f could act on a list of tensors
+                         # with different shapes)
+        self.gradient = gradient # g: R^n -> R^n * R^m ~ R^(n + m) (when f acts
+                                 # on a single tensor)
     def __call__(self, args):
         return self.calc(args)
 
@@ -23,7 +24,30 @@ class Gradient:
     def __call__(self, activations):
         return self.calc(*activations)
 
-# Some useful maps
-def l2_map(y, y0): return (y - y0)*(y - y0)
-def l2_grad(y, y0): return np.array([2*(y - y0), 2*(y0 - y)])
+
+# Useful smooth maps
+def l2_map(x, y): return np.sum(np.multiply((x - y), (x - y)))
+def l2_grad(x, y): return np.array([2*(x - y), 2*(y - x)])
 l2_norm = SmoothMap(Map(l2_map), Gradient(l2_grad))
+
+def matrix_product_map(x,y): return np.matmul(x, y)
+def matrix_product_grad(x,y):
+    dx = np.zeros(shape=(x.shape[0], x.shape[1], x.shape[0], y.shape[1]))
+    for i in range(x.shape[0]):
+        for j in range(x.shape[1]):
+            dx[i, j, i] = y[j]
+    dy = np.zeros(shape=(y.shape[0], y.shape[1], x.shape[0], y.shape[1]))
+    for i in range(y.shape[0]):
+        for j in range(y.shape[1]):
+            dy[i, j, :, j] = x[:, i]
+    return [dx, dy]
+matrix_product = SmoothMap(Map(matrix_product_map), Gradient(matrix_product_grad))
+
+# def add_map():
+#
+#
+# def sigmoid_map(x):
+# def sigmoid_grad(x):
+#
+# def tanh_map(x):
+# def tanh_grad(x):

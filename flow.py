@@ -51,11 +51,12 @@ class Flow:
     def connect_constant(self, name, value, sinks=[]):
         self.connect('CONSTANT', name=name, value=value, sinks=sinks.copy())
 
-    def connect_variable(self, name, source=[], sinks=[]):
-        self.connect('VARIABLE', name=name, sources=[source], sinks=sinks.copy())
+    def connect_variable(self, name, source=None, sinks=[]):
+        sources = [source] if source else []
+        self.connect('VARIABLE', name=name, sources=sources, sinks=sinks.copy())
 
     def connect_parameter(self, name, value=None, sinks=[]):
-        self.connect('PARAMETER', name=name, value=value, sinks=sinks.copy())
+        self.connect('PARAMETER', name=name, value=value, sources=[], sinks=sinks.copy())
 
     def set_inputs(self, inputs):
         self.inputs = set(inputs)
@@ -63,9 +64,9 @@ class Flow:
     def set_outputs(self, outputs):
         self.outputs = set(outputs)
 
-    def set_loss(self, sources, smooth_scalar_map, supervisors=0):
+    def set_loss(self, sources, scalar_map, supervisors=0):
         self.loss_sources = sources
-        self.loss_map = smooth_scalar_map
+        self.loss_map = scalar_map
         self.supervisors = supervisors # number of outputs provided during training
 
     def set_learning_rate(rate):
