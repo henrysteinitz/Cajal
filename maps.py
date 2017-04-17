@@ -43,9 +43,20 @@ def matrix_product_grad(x,y):
     return [dx, dy]
 matrix_product = SmoothMap(Map(matrix_product_map), Gradient(matrix_product_grad))
 
-# def add_map():
-#
-#
+def add_map(x, y): return x + y
+def add_grad(x, y):
+    dx = np.zeros(shape=(x.shape[0], x.shape[1]))
+    for i in range(x.shape[0]):
+        for j in range(x.shape[1]):
+            dx[i, j, i, j] = 1
+    dy = np.zeros(shape=(y.shape[0], y.shape[1]))
+    for i in range(y.shape[0]):
+        for j in range(y.shape[1]):
+            dy[i, j, i, j] = 1
+    return [dx, dy]
+add = SmoothMap(Map(add_map), Gradient(add_grad))
+
+
 # def sigmoid_map(x):
 # def sigmoid_grad(x):
 #

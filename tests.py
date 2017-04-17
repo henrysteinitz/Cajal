@@ -74,7 +74,7 @@ class CajalTests(unittest.TestCase):
         # test training
         product_flow.set_loss(sources=['Y'], scalar_map=l2_norm, supervisors=1)
         product_flow.train(inputs={'X': inputs}, outputs=outputs, learning_rate=.01)
-        list_W = [list(row) for row in list(product_flow.nodes['W'])]
+        W = product_flow.nodes['W']
         self.assertAlmostEqual(W[0,0], 2.0, places=3)
         self.assertAlmostEqual(W[0,1], 3.0, places=3)
         self.assertAlmostEqual(W[1,0], 5.0, places=3)
