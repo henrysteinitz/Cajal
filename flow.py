@@ -6,26 +6,22 @@ NODE_KINDS = ['MAP', 'CONSTANT', 'VARIABLE', 'PARAMETER']
 
 class Flow:
 
-    nodes = {}
-    gradients = {}
-    kinds = {}
-
-    sources = {}
-    sinks = {}
-
-    inputs = set([])
-    outputs = set([])
-    parameters = set([])
-    constants = set([])
-
-    loss_sources = []
-    loss_map = None
-
     def loss_map(*args): return 0
 
     def __init__(self, inputs=[], outputs=[]):
         self.inputs = set(inputs)
         self.outputs = set(outputs)
+        self.nodes = {}
+        self.gradients = {}
+        self.kinds = {}
+
+        self.sources = {}
+        self.sinks = {}
+
+        self.parameters = set([])
+        self.constants = set([])
+
+        self.loss_sources = []
         # self.nodes.update({x: None for x in inputs})
         # self.nodes.update({y: None for y in outputs})
 
@@ -109,6 +105,8 @@ class Flow:
             active_sink = self.sinks[active_map][0]
             sink_gradient = self.gradients[active_sink]
             source_activations = [self.nodes[source] for source in active_sources]
+            if active_map == 'w':
+                print(self.nodes)
             source_gradients = self.nodes[active_map].gradient(source_activations)
 
             traversed.add(active_map)
@@ -121,7 +119,7 @@ class Flow:
 
         return {param: self.gradients[param] for param in parameters}
 
-    def train(self, inputs, outputs, learning_rate=.1):
+    def train(self, inputs, outputs, learning_rate=.01):
         self.__attach_supervisors()
         self.__attach_loss()
 

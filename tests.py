@@ -50,6 +50,7 @@ class CajalTests(unittest.TestCase):
         result = flow2.play({'x': [1,2]})
         self.assertAlmostEqual(9.0, result['y'], places=2)
 
+    # Learn a matrix multiplication paramter
     def test_matrix_product(self):
         # build graph
         product_flow = Flow(inputs=['X'], outputs=['Y'])
@@ -65,16 +66,19 @@ class CajalTests(unittest.TestCase):
         # test forward pass
         result = product_flow.play({'X': np.array([[1,2,3], [2,3,4]])})
         list_Y = [list(row) for row in list(result['Y'])]
-        self.assertEqual(list_Y, [[3,5,7], [3,5,7]])
+        self.assertAlmostEqual(list_Y, [[3,5,7], [3,5,7]])
         # generate data
-        inputs = [np.random.rand(2,3) for _ in range(3000)]
+        inputs = [np.random.rand(2,3) for _ in range(2000)]
         real_W = np.array([[2.0,3.0],[5.0,4.0]])
         outputs = [np.matmul(real_W, inp) for inp in inputs]
-        # set loss map & train
+        # test training
         product_flow.set_loss(sources=['Y'], scalar_map=l2_norm, supervisors=1)
-        product_flow.train(inputs={'X': inputs}, outputs=outputs)
-
-
+        product_flow.train(inputs={'X': inputs}, outputs=outputs, learning_rate=.01)
+        list_W = [list(row) for row in list(product_flow.nodes['W'])]
+        self.assertAlmostEqual(W[0,0], 2.0, places=3)
+        self.assertAlmostEqual(W[0,1], 3.0, places=3)
+        self.assertAlmostEqual(W[1,0], 5.0, places=3)
+        self.assertAlmostEqual(W[1,1], 4.0, places=3)
 
     # Multilayer Perceptron on MNIST
     def test_mlp(self):
