@@ -33,27 +33,38 @@ l2_norm = SmoothMap(Map(l2_map), Gradient(l2_grad))
 # TODO Generalize to higher dimensions and any number of arguments
 def matrix_product_map(x,y): return np.matmul(x, y)
 def matrix_product_grad(x,y):
-    dx = np.zeros(shape=(x.shape[0], x.shape[1], x.shape[0], y.shape[1]))
-    for i in range(x.shape[0]):
-        for j in range(x.shape[1]):
-            dx[i, j, i] = y[j]
-    dy = np.zeros(shape=(y.shape[0], y.shape[1], x.shape[0], y.shape[1]))
-    for i in range(y.shape[0]):
-        for j in range(y.shape[1]):
-            dy[i, j, :, j] = x[:, i]
+    dx = np.zeros((*x.shape, *np.matmul(np.zeros_like(x), np.zeros_like(y)).shape))
+    for pos in np.ndindex(*x.shape):
+        dx[(*pos, pos[0])] = y[pos[1]]
+    dy = np.zeros((*y.shape, *np.matmul(np.zeros_like(x), np.zeros_like(y)).shape))
+    if y.ndim == 1:
+        for pos in np.ndindex(*y.shape):
+            dy[(*pos,)] = x[:, pos[0]]
+    else:
+        for pos in np.ndindex(*y.shape):
+            dy[pos[0], pos[1], :, pos[1]] = x[:, pos[0]]
     return [dx, dy]
 matrix_product = SmoothMap(Map(matrix_product_map), Gradient(matrix_product_grad))
 
+def matrix_vector_product_map(x, y): return np.matmul(x,y)
+def matrix_vector_product_grad(x, y):
+    dx = np.zeros(shape=(x.shape[0], x.shape[1], x.shape[0]))
+    for pos in np.ndindex(*x.shape):
+        dx[(*pos, pos[0])] = y[pos[1]]
+    dy = np.zeros(shape=(y.shape[0], x.shape[0]))
+    for i in range(y.shape[0]):
+        dy[i] = x[:, i]
+    return [dx, dy]
+matrix_vector_product = SmoothMap(Map(matrix_vector_product_map), Gradient(matrix_vector_product_grad))
+
 def add_map(x, y): return x + y
 def add_grad(x, y):
-    dx = np.zeros(shape=(x.shape[0], x.shape[1]))
-    for i in range(x.shape[0]):
-        for j in range(x.shape[1]):
-            dx[i, j, i, j] = 1
-    dy = np.zeros(shape=(y.shape[0], y.shape[1]))
-    for i in range(y.shape[0]):
-        for j in range(y.shape[1]):
-            dy[i, j, i, j] = 1
+    dx = np.zeros(shape=(*x.shape, *x.shape))
+    for pos in np.ndindex(*x.shape):
+        dx[(*pos, *pos)] = 1
+    dy = np.zeros(shape=(*y.shape, *y.shape))
+    for pos in np.ndindex(*y.shape):
+        dy[(*pos, *pos)] = 1
     return [dx, dy]
 add = SmoothMap(Map(add_map), Gradient(add_grad))
 
@@ -68,11 +79,31 @@ def multiply_grad(x, y):
         for j in range(y.shape[1]):
             dy[i, j, i, j] = x[i, j]
     return [dx, dy]
-add = SmoothMap(Map(add_map), Gradient(add_grad))
+multiply = SmoothMap(Map(multiply_map), Gradient(multiply_grad))
+
+def sigmoid_map(x): return 1 / (1 + np.exp(-x))
+def sigmoid_grad(x):
+    dx = np.diag(sigmoid_map(x) * (1 - sigmoid_map(x)))
+    return [dx]
+sigmoid = SmoothMap(Map(sigmoid_map), Gradient(sigmoid_grad))
+
+def soft_max_map(x):
+    s = x - max(x)
+    return np.exp(s) / sum(np.exp(s))
+def soft_max_grad(x):
+    s = x - max(x)
+    exp = np.exp(s)
+    grad = np.zeros((len(x), len(x)))
+    d = (exp * (sum(exp) - exp)) / (sum(exp) * sum(exp))
+    for i in range(len(s)):
+        for j in range(len(s)):
+            if i == j:
+                grad[i][j] = d[i]
+            else:
+                grad[i][j] = ((-exp[i])*(exp[j])) / (sum(exp) * sum(exp))
+    return [grad]
+soft_max = SmoothMap(Map(soft_max_map), Gradient(soft_max_grad))
 
 
-# def sigmoid_map(x):
-# def sigmoid_grad(x):
-#
 # def tanh_map(x):
 # def tanh_grad(x):

@@ -1,7 +1,7 @@
-from flow import Flow
+from cajal.flow import Flow
 import numpy as np
 import random
-from maps import *
+from cajal.maps import *
 import unittest
 
 
@@ -80,9 +80,12 @@ class CajalTests(unittest.TestCase):
         self.assertAlmostEqual(W[1,0], 5.0, places=3)
         self.assertAlmostEqual(W[1,1], 4.0, places=3)
 
-    # Multilayer Perceptron on MNIST
-    def test_mlp(self):
-        mlp = Flow(inputs='x', outputs='y')
+
+
+    # def test_flow_composition(self):
+    #
+    # def test_define_syntax(self):
+
 
 if __name__ == '__main__':
     unittest.main()

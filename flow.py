@@ -1,6 +1,6 @@
 import numpy as np
-from helpers import sum_product
-from maps import *
+from cajal.helpers import sum_product
+from cajal.maps import *
 
 NODE_KINDS = ['MAP', 'CONSTANT', 'VARIABLE', 'PARAMETER']
 
@@ -21,6 +21,7 @@ class Flow:
         self.parameters = set([])
         self.constants = set([])
 
+        self.parameter_shapes = {}
         self.loss_sources = []
         # self.nodes.update({x: None for x in inputs})
         # self.nodes.update({y: None for y in outputs})
@@ -38,6 +39,9 @@ class Flow:
 
         if kind == 'PARAMETER':
             self.parameters.add(name)
+            shape = kwargs.get('shape', np.array(value).shape)
+            self.parameter_shapes[name] = shape
+
         elif kind == 'CONSTANT':
             self.constants.add(name)
 
@@ -51,8 +55,11 @@ class Flow:
         sources = [source] if source else []
         self.connect('VARIABLE', name=name, sources=sources, sinks=sinks.copy())
 
-    def connect_parameter(self, name, value=None, sinks=[]):
-        self.connect('PARAMETER', name=name, value=value, sources=[], sinks=sinks.copy())
+    def connect_parameter(self, name, value=None, sinks=[], shape=None):
+        if value == None and shape == None:
+            raise 'Parameters must be connected with a value or a shape'
+        self.connect('PARAMETER', name=name, value=value, sources=[],
+                                  sinks=sinks.copy(), shape=shape)
 
     def set_inputs(self, inputs):
         self.inputs = set(inputs)
@@ -68,6 +75,17 @@ class Flow:
     def set_learning_rate(rate):
         self.learning_rate = rate
 
+    def initialize_parameters(self, bandwidth = 2):
+        for p in self.parameters:
+            self.nodes[p] = np.random.rand(*self.parameter_shapes[p])
+            self.nodes[p] *= bandwidth
+            self.nodes[p] -= bandwidth / 2
+
+    def print_parameters(self):
+        for p in self.parameters:
+            print(p)
+            print(self.nodes[p])
+
     def play(self, input_values={}, outputs=None):
         outputs = outputs or self.outputs
         remaining_outputs = set(outputs)
@@ -82,14 +100,12 @@ class Flow:
             active_sink = self.sinks[active_map][0]
             source_activations = [self.nodes[source] for source in active_sources]
             sink_activation = self.nodes[active_map](source_activations)
-
             self.nodes[active_sink] = sink_activation
             traversed.add(active_map)
             traversed.add(active_sink)
             remaining_outputs.discard(active_sink)
 
         return {out: self.nodes[out] for out in outputs}
-
 
     def backpropagate(self, parameters=None):
         self.__reset_gradients()
@@ -105,9 +121,7 @@ class Flow:
             active_sink = self.sinks[active_map][0]
             sink_gradient = self.gradients[active_sink]
             source_activations = [self.nodes[source] for source in active_sources]
-            if active_map == 'w':
-                print(self.nodes)
-            source_gradients = self.nodes[active_map].gradient(source_activations)
+            source_gradients = self.nodes[active_map].gradient(source_activations.copy())
 
             traversed.add(active_map)
             for i, source in enumerate(active_sources):
@@ -115,7 +129,6 @@ class Flow:
                 if self.__all_sinks_traversed(source, traversed):
                     traversed.add(source)
                     remaining_parameters.discard(source)
-
 
         return {param: self.gradients[param] for param in parameters}
 
